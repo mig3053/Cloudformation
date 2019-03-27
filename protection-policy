@@ -1,0 +1,135 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "cloudtrail:StopLogging",
+                "cloudtrail:DeleteTrail",
+                "cloudtrail:UpdateTrail"
+            ],
+            "Resource": "arn:aws:cloudtrail:*:*:trail/vendor-security-logs",
+            "Effect": "Deny"
+        },
+        {
+            "Condition": {
+                "ForAllValues:StringEquals": {
+                    "cloudformation:TemplateUrl": [
+                        "https://s3.amazonaws.com/cip-cfn-templates/*",
+                        "https://s3.amazonaws.com/cloudformation-stackset-sample-templates-us-east-1/AWSCloudFormationStackSetExecutionRole.yml"
+                    ]
+                }
+            },
+            "Action": [
+                "cloudformation:SetStackPolicy",
+                "cloudformation:CancelUpdateStack",
+                "cloudformation:DeleteStack",
+                "cloudformation:UpdateStack",
+                "cloudformation:CreateChangeSet"
+            ],
+            "Resource": [
+                "arn:aws:cloudformation:*:*:stack/StackSet-*",
+                "arn:aws:cloudformation:*:*:stack/cloudformationStackRole/*"
+            ],
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "config:DeleteDeliveryChannel",
+                "config:PutConfigurationRecorder",
+                "config:DeleteEvaluationResults",
+                "config:PutConfigRule",
+                "config:StopConfigurationRecorder",
+                "config:PutDeliveryChannel",
+                "config:DeleteConfigurationRecorder",
+                "config:DeleteConfigRule"
+            ],
+            "Resource": "*",
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "iam:UpdateSAMLProvider",
+                "iam:DeleteSAMLProvider"
+            ],
+            "Resource": "arn:aws:iam::*:saml-provider/VendorInternalStage",
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "iam:DeleteRole",
+                "iam:DeleteServiceLinkedRole",
+                "iam:DetachRolePolicy",
+                "iam:AttachRolePolicy",
+                "iam:UpdateAssumeRolePolicy"
+            ],
+            "Resource": [
+                "arn:aws:iam::*:role/ACCOUNTADMIN",
+                "arn:aws:iam::*:role/ANALYTICSDEVELOPER",
+                "arn:aws:iam::*:role/BILLING",
+                "arn:aws:iam::*:role/CLOUDADMIN",
+                "arn:aws:iam::*:role/DATABASEADMIN",
+                "arn:aws:iam::*:role/DATASCIENTIST",
+                "arn:aws:iam::*:role/DEVELOPER",
+                "arn:aws:iam::*:role/IDENTITYACCESSADMIN",
+                "arn:aws:iam::*:role/MOBILEDEVELOPER",
+                "arn:aws:iam::*:role/NETWORKADMIN",
+                "arn:aws:iam::*:role/READONLYACCESS",
+                "arn:aws:iam::*:role/SECURITYAUDIT",
+                "arn:aws:iam::*:role/STORAGEADMIN",
+                "arn:aws:iam::*:role/SYSTEMADMIN",
+                "arn:aws:iam::*:role/ACCOUNTADMIN",
+                "arn:aws:iam::*:role/CIPConfigRole",
+                "arn:aws:iam::*:role/AWSCloudFormationStackSetExecutionRole",
+                "arn:aws:iam::*:role/IDPLambdaRole",
+                "arn:aws:iam::*:role/CIPKrakenRole",
+                "arn:aws:iam::*:role/CloudTrailCloudWatchRole"
+            ],
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "iam:DeletePolicy",
+                "iam:CreatePolicyVersion",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion"
+            ],
+            "Resource": [
+                "arn:aws:iam::*:policy/ProtectionPolicy",
+                "arn:aws:iam::*:policy/IDPLambdaPolicy",
+                "arn:aws:iam::*:policy/CIPConfigPolicy",
+                "arn:aws:iam::*:policy/CIPKrakenPolicy",
+                "arn:aws:iam::*:policy/CloudTrailtoWatchPolicy"
+            ],
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "iam:CreateSAMLProvider"
+            ],
+            "Resource": "*",
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "events:DeleteRule",
+                "events:RemoveTargets",
+                "events:DisableRule"
+            ],
+            "Resource": [
+                "arn:aws:events:*:*:rule/RootLoginDetected",
+                "arn:aws:events:*:*:rule/IAMActionTaken",
+                "arn:aws:events:*:*:rule/S3ActionTaken"
+            ],
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "lambda:DeleteFunction"
+            ],
+            "Resource": [
+                "arn:aws:lambda:us-east-1:*:function:StackSet-*-ProviderCreator-*"
+            ],
+            "Effect": "Deny"
+        }
+    ]
+}
