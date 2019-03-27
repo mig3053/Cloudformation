@@ -1,0 +1,405 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This is a sample template that demonstrates the creation of a lambda function
+  which will copy the data from external S3 bucket to Landing S3 bucket by launching
+  an EC2 instance and if required, it will decrypt the files using pgp private
+  key and paraphrase. (c) 2018 Amazon Web Services, Inc. or its affiliates.
+  All Rights Reserved. This AWS Content is provided subject to the terms of the
+  AWS Customer Agreement available at http://aws.amazon.com/agreement or other
+  written agreement between Customer and Amazon Web Services, Inc.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Bucket Configuration
+        Parameters:
+          - BucketName
+#          - OutputBucket
+          - InvokeLambdaSNSTopic
+      - Label:
+          default: KMS Keys for S3 encryption
+        Parameters:
+          - KMSKeyIDForExternalBucket
+          - KMSKeyIDForLandingBucket          
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - Region
+          - InstanceType
+          - AMIID
+          - SubnetID
+          - KeyPair
+          - SecurityGroupId
+      - Label:
+          default: Data Encryption Configuration
+        Parameters:
+          - PgpEncrypted
+          - PrivateKeyLocation
+          - KMSIDForPrivateKeyDecryption
+      - Label:
+          default: Lambda Configuration
+        Parameters:
+          - LambdaS3Bucket
+          - LambdaS3Key
+      - Label:
+          default: Lambda Tags
+        Parameters:
+          - businessDataCategory
+          - complianceDataCategory
+          - dataClassification
+          - dataCustodian
+          - dataOwner
+          - project
+          - purpose
+          - resourceOwner
+    ParameterLabels:
+      BucketName:
+        default: Name of the S3 bucket (without the suffix)
+#      OutputBucket:
+#        default: Do you need the output bucket for this Vendor?
+      PgpEncrypted:
+        default: Will the data in the external bucket be PGP encrypted (yes/no)?
+      PrivateKeyLocation:
+        default: What is the location of the Private PGP Key
+          in parameter store (if the data is encrypted)?
+      KMSIDForPrivateKeyDecryption:
+        default: What is the KMS Key ID which was used to encrypt the private
+          PGP Key in parameter store a secure string (if the data is encrypted)?          
+      Region:
+        default: Region where you want to launch your EC2 instance
+      InstanceType:
+        default: Type of EC2 instance
+      AMIID:
+        default: AMI ID for EC2 instance
+      SubnetID:
+        default: Subnet where you want to launch your EC2 instance
+      KeyPair:
+        default: KeyPair used to launch EC2 instance
+      SecurityGroupId:
+         default: Security Group ID for launching EC2 instance
+      LambdaS3Bucket:
+        default: What is the S3 bucket location where the zipped code for
+          for lambda function is stored?
+      LambdaS3Key:
+        default: What is the S3 key where the zipped code for
+          for lambda function is stored?
+      InvokeLambdaSNSTopic:
+        default: The SNS Topic ARN which S3 bucket notification will be sent to,
+          when the data is added to the external bucket.
+      KMSKeyIDForExternalBucket:
+        default: KMS Key ID for the key which was used to encrypt S3 external
+          bucket for Server side encryption
+      KMSKeyIDForLandingBucket:
+        default: KMS Key ID for the key which was used to encrypt S3 landing
+          bucket for Server side encryption          
+Parameters:
+  Region:
+    Description: Region Name
+    Type: String
+    Default: 'us-east-1'
+  InstanceType:
+    Description: Type of EC2 instance
+    Type: String
+    Default: 't2.micro'
+  AMIID:
+    Description: AMI for EC2 instance
+    Type: String
+    Default: 'ami-013be31976ca2c322'
+  SubnetID:
+    Description: SubnetIDs
+    Type: AWS::EC2::Subnet::Id
+  KeyPair:
+    Description: EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+  SecurityGroupId:
+    Description: SecurityGroupId
+    Type: AWS::EC2::SecurityGroup::Id
+  BucketName:
+    Description: >-
+      The name of the S3 bucket. It should include the name of the account per
+      Cloud COE standards (e.g. imbigdata-prod-acxiom). The template will add
+      the appropriate suffix to this name (-external-bucket or -landing-bucket)
+    Type: String
+  PgpEncrypted:
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: please choose a valid response.
+    Default: 'no'
+    Type: String
+  PrivateKeyLocation:
+    Description: >-
+      If the data is encrypted with PGP, the location of the private pgp key in
+      SSM parameter store
+    Type: String
+  KMSIDForPrivateKeyDecryption:
+    Description: KMS Key for decrypting Private Key from parameter store
+    Type: String
+  LambdaS3Bucket:
+    Type: String
+    Default: S3 Bucket Name
+    Description: S3 Bucket Name
+  LambdaS3Key:
+    Type: String
+    Default: /lambda.zip
+    Description: Lambda Function Zip file
+  KMSKeyIDForExternalBucket:
+    Type: String
+    Description: External Bucket KMS Key ID
+  KMSKeyIDForLandingBucket:
+    Type: String
+    Description: Landing Bucket KMS Key ID
+  businessDataCategory:
+    AllowedValues:
+      - 'Product'
+      - 'Provider'
+      - 'Client'
+      - 'Customer'
+      - 'Clinical'
+      - 'Claim'
+      - 'Finance'
+      - 'Corporate'
+      - 'External Code Set'
+      - 'Regulatory'
+      - 'Producer'
+      - 'Sales'
+    Description: 'This tag identifies the type of data: customer, hcp, client,
+      broker, marketing, claim...'
+    Default: 'Customer'
+    Type: String
+  complianceDataCategory:
+    AllowedValues:
+      - 'PHI'
+      - 'PII'
+      - 'CPR'
+    Description: 'This tag identifies the information available for Protected
+      Health Information, Personally Identifiable Information and Cyber Privacy
+      Risk (CPR) only.'
+    Default: 'PII'
+    Type: String
+  dataClassification:
+    AllowedValues:
+      - 'highlySensitive'
+      - 'restricted'
+      - 'proprietary'
+      - 'public'
+    Description: 'This tag is an identifier for the specific data-confidentiality
+      level a resource supports based off risk if the data were lost/stolen/accessed
+      by unauthorized persons.'
+    Default: 'highlySensitive'
+    Type: String
+  dataCustodian:
+    Description: 'This tag identifies person responsible for the protection of
+      information assests and data.'
+    MinLength: 1
+    Type: String
+  dataOwner:
+    Description: 'This tag identifies person responsible and accountable for a
+      particular set of data.'
+    MinLength: 1
+    Type: String
+  project:
+    Description: 'This tag is used to identify the project(s) the resource supports.'
+    MinLength: 1
+    Type: String
+  purpose:
+    Description: 'This tag is for a short description of what the resource does and
+      why it exists.'
+    MinLength: 1
+    Type: String
+  resourceOwner:
+    Description: 'This tag identifies the team primary assignment group that created
+      or supports the resource.'
+    MinLength: 1
+    Type: String
+  InvokeLambdaSNSTopic:
+    Description: Please specify a valid SNS Topic Arn
+    Type: String
+#  EmailLambdaSNSTopic:
+#    Description: Please specify a valid SNS Topic Arn
+#    Type: String
+Conditions:
+  PgpEncryptedData: !Equals
+    - !Ref 'PgpEncrypted'
+    - 'yes'
+Resources:
+  EventsPermissionForSNS:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: S3CopyLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref InvokeLambdaSNSTopic
+
+  EC2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Effect: Allow
+                Resource: !Sub 'arn:aws:s3:::${BucketName}-external-bucket/*'
+              - Action:
+                  - ssm:GetParameters
+                  - ssm:DescribeParameters
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - 'kms:DescribeKey'
+                  - 'kms:Decrypt'
+                Effect: Allow
+                Resource: 
+                  - !Sub 'arn:aws:kms:${Region}:${AWS::AccountId}:key/${KMSKeyIDForExternalBucket}'
+                  - !If
+                    - PgpEncryptedData
+                    - !Join
+                      - ''
+                      - - !Sub 'arn:aws:kms:${Region}:${AWS::AccountId}:key/'
+                        - !Ref KMSIDForPrivateKeyDecryption
+                    - !Ref 'AWS::NoValue'
+              - Action:
+                  - s3:PutObject
+                Effect: Allow
+                Resource: !Sub 'arn:aws:s3:::${BucketName}-landing-bucket/*'
+              - Action:
+                  - s3:ListBucket
+                Effect: Allow
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BucketName}-landing-bucket'
+                  - !Sub 'arn:aws:s3:::${BucketName}-external-bucket'
+              - Action:
+                  - 'kms:DescribeKey'
+                  - 'kms:GenerateDataKey*'
+                Effect: Allow
+                Resource: !Sub 'arn:aws:kms:${Region}:${AWS::AccountId}:key/${KMSKeyIDForLandingBucket}'
+            Version: '2012-10-17'
+          PolicyName: 'EC2InstanceProfileRolePolicy'
+
+  InstanceProfileforEC2Role:
+    DependsOn: EC2Role
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  S3CopyLambda:
+    DependsOn: S3CopyLambdaRole
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref LambdaS3Bucket
+        S3Key: !Ref LambdaS3Key
+      Description: Copy the data from one S3 bucket to another while decrypting with PGP.
+      Environment:
+        Variables:
+          REGION: !Ref Region
+          INSTANCE_TYPE: !Ref InstanceType
+          IAM_INSTANCE_PROFILE: !GetAtt InstanceProfileforEC2Role.Arn
+          SUBNET_ID: !Ref SubnetID
+          KEYPAIR: !Ref KeyPair
+          SECURITY_GROUP_ID: !Ref SecurityGroupId
+          PGP_ENCRYPTED: !Ref PgpEncrypted
+          PRIVATE_KEY_LOCATION: !Ref PrivateKeyLocation
+          AMIID: !Ref AMIID
+      Handler: index.lambda_handler
+      Role : !GetAtt S3CopyLambdaRole.Arn
+      Runtime: python3.6
+      Timeout: 600
+      Tags:
+        -
+          Key: businessDataCategory
+          Value: !Ref businessDataCategory
+        -
+          Key: complianceDataCategory
+          Value: !Ref complianceDataCategory
+        -
+          Key: dataClassification
+          Value: !Ref dataClassification
+        -
+          Key: dataCustodian
+          Value: !Ref dataCustodian
+        -
+          Key: dataOwner
+          Value: !Ref dataOwner
+        -
+          Key: project
+          Value: !Ref project
+        -
+          Key: purpose
+          Value: !Ref purpose
+        -
+          Key: resourceOwner
+          Value: !Ref resourceOwner
+
+  S3CopyLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - ec2:RunInstances
+                  - ec2:CreateTags
+
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - ssm:GetParameters
+                  - ssm:DescribeParameters
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - iam:PassRole
+                  - iam:ListInstanceProfiles
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - 'kms:DescribeKey'
+                  - 'kms:Decrypt'
+                Effect: Allow
+                Resource: !Sub 'arn:aws:kms:${Region}:${AWS::AccountId}:key/${KMSKeyIDForExternalBucket}'
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource: arn:aws:logs:*:*:*
+            Version: '2012-10-17'
+          PolicyName: 'S3CopyLambdaPolicy'
+  S3CopyLambdaSNSSubscription:
+    DependsOn: S3CopyLambda
+    Type: "AWS::SNS::Subscription"
+    Properties:
+      Endpoint: !GetAtt S3CopyLambda.Arn
+      Protocol: lambda
+      TopicArn: !Ref InvokeLambdaSNSTopic
+
+Outputs:
+  S3CopyLambdaArn:
+    Description: S3 Copy Lambda Arn
+    Value: !GetAtt S3CopyLambda.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-S3CopyLambda
