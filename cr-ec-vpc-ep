@@ -1,0 +1,222 @@
+---
+# Create VPC, SUBNETS, SUBNET ASSOC, SECURITY GROUP, INTERNET GATEWAY, ROUTE TABLE, ASSOC ROUTE
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "SSM POC"
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+    
+ 
+    
+  AmiID: 
+    Description: AMI to use
+    Type: String
+    Default: ami-02e680c4540db351e
+    ConstraintDescription: must be the valid ami for the default region.
+    
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.small
+    AllowedValues:
+     - t2.small
+    ConstraintDescription: must be a valid EC2 instance type.
+    
+        
+ ########################################################################   
+Resources:                          #Create resources
+  EC2Instance:                      #EC2 
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType:
+        Ref: InstanceType
+      SecurityGroupIds: 
+      -  Ref: InstanceSecurityGroup
+      KeyName:
+        Ref: KeyName
+      ImageId:
+        Ref: AmiID
+      SubnetId: !Ref mySubnetA  
+      IamInstanceProfile: EC2SSMRole  
+      Tags:
+      - Key: Name
+        Value: test-ep-ec2       
+        
+  myVPC:                            #VPC
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 11.0.0.0/16
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name		
+        Value: test-ep-vpc
+
+  mySubnetA:                       #SUBNET A
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myVPC        
+      CidrBlock: 11.0.0.0/24
+      AvailabilityZone: "us-east-2a"
+      Tags:
+      - Key: Name
+        Value: test-ep-subneta
+
+  mySubnetRouteTableAssociationA:   #ROUTE TABLE ASSOC WITH SUBNET A
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref mySubnetA
+      RouteTableId: !Ref myRouteTable
+
+  
+  InstanceSecurityGroup:            #SECURITY GROUP
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+     GroupDescription: Allow http to client host
+     VpcId: !Ref myVPC     
+     SecurityGroupIngress:
+     - IpProtocol: tcp
+       FromPort: 22
+       ToPort: 22
+       CidrIp: 0.0.0.0/0
+     SecurityGroupEgress:
+     - IpProtocol: tcp
+       FromPort: 22
+       ToPort: 22
+       CidrIp: 0.0.0.0/0
+     Tags:
+       - Key: Name
+         Value: test-ep-sg
+
+  myRouteTable:                   #ROUTE TABLE
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref myVPC      
+      Tags:
+      - Key: Name
+        Value: test-ep-rtable
+
+  myRoute:                        #ROUTE
+    Type: AWS::EC2::Route
+    DependsOn: myInternetGateway
+    Properties:
+      RouteTableId: !Ref myRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: myInternetGateway
+
+  myInternetGateway:              #INTERNET GATEWAY 
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: test-ep-igw
+  
+  AttachGateway:                  #ATTACH GATEWAY 
+   Type: AWS::EC2::VPCGatewayAttachment
+   Properties:
+    VpcId: !Ref myVPC
+    InternetGatewayId: !Ref myInternetGateway
+
+  EC2ENDPOINT:                  #EC2 ENDPOINT
+    Description: Stack to create EC2 endpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId:  !Ref myVPC
+      VpcEndpointType: Interface
+      SubnetIds: 
+      - !Ref mySubnetA
+      SecurityGroupIds: 
+      - !Ref InstanceSecurityGroup
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .ec2
+
+
+  EC2MESSAGESENDPOINT:          #EC2 MESSAGES ENDPOINT
+    Description: Stack to EC2 messages  endpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId:  !Ref myVPC
+      VpcEndpointType: Interface
+      SubnetIds: 
+      - !Ref mySubnetA
+      SecurityGroupIds: 
+      - !Ref InstanceSecurityGroup
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .ec2messages
+
+  SSMENDPOINT:                    #SSM ENDPOINT
+    Description: Stack to create SSM endpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId:  !Ref myVPC
+      VpcEndpointType: Interface
+      SubnetIds: 
+      - !Ref mySubnetA
+      SecurityGroupIds:
+      - !Ref InstanceSecurityGroup
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .ssm
+
+  SSMMESSAGESENDPOINT:            #SSM MESSAGES ENDPOINT
+    Description: Stack to create SSM Messages endpoint
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      VpcId:  !Ref myVPC
+      VpcEndpointType: Interface
+      SubnetIds: 
+      - !Ref mySubnetA
+      SecurityGroupIds: 
+      - !Ref InstanceSecurityGroup
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .ssmmessages
+
+Outputs:
+   
+
+  vpcid:
+    Description: Get VPC  ID
+    Value: !Ref myVPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+
+  subnetaid:
+    Description: Get Subnet A ID
+    Value: !Ref mySubnetA
+    Export:
+      Name: !Sub ${AWS::StackName}-SUBNETA
+
+      
+  routetableid:
+    Description: Get Route table ID
+    Value: !Ref myRouteTable
+    Export:
+      Name: !Sub ${AWS::StackName}-ROUTETABLE
+
+  securitygroupid:
+    Description: Get security group id  
+    Value:  !Ref InstanceSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-SECURITYGROUP
+      
+  ec2instanceid:
+    Description: Get EC2 instance  id  
+    Value:  !Ref EC2Instance
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2INSTANCE
+
