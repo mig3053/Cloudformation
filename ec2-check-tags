@@ -1,0 +1,21 @@
+policies:
+- name: ec2-check-for-required-tags
+  comment: Find out ec2 instances that are not conforming to tagging policies
+  resource: ec2
+  mode:
+    type: cloudtrail
+    role: arn:aws:iam::519888993985:role/CloudCustodianLamba
+    events:
+      - RunInstances
+  filters:
+    - "tag:maid_status": absent
+    - or:
+      - "tag:environment": absent
+      - "tag:owner": absent
+      - "tag:project": absent
+      - "tag:purpose": absent
+      - "tag:resourceName": absent
+  actions:
+   - type: mark-for-op
+     op: stop
+     days: 1
